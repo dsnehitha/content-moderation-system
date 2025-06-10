@@ -192,3 +192,14 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+#aws configuration file
+aws_config.json
+
+#model informaion file
+model_info.json
+model_path.txt
+
+#api information file
+api_info.json
+endpoint_info.json

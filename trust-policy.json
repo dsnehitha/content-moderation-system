@@ -1,12 +1,108 @@
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "sagemaker.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
-    }
-  ]
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "Statement1",
+			"Effect": "Allow",
+			"Action": [
+				"iam:CreateRole",
+				"iam:PutRolePolicy",
+				"iam:AttachRolePolicy",
+				"iam:PassRole"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowSagemakerTrainingAndDeployment",
+			"Effect": "Allow",
+			"Action": [
+				"sagemaker:CreateTrainingJob",
+				"sagemaker:DescribeTrainingJob",
+				"sagemaker:CreateModel",
+				"sagemaker:CreateEndpointConfig",
+				"sagemaker:CreateEndpoint",
+				"sagemaker:DescribeEndpoint",
+				"sagemaker:InvokeEndpoint",
+				"sagemaker:ListTrainingJobs"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowIAMRoleUseForSagemaker",
+			"Effect": "Allow",
+			"Action": [
+				"iam:PassRole"
+			],
+			"Resource": "arn:aws:iam::<acc-id>:role/service-role/AmazonSageMaker-ExecutionRole-20250525T123664"
+		},
+		{
+			"Sid": "AllowSagemakerLogAccess",
+			"Effect": "Allow",
+			"Action": [
+				"logs:DescribeLogStreams",
+				"logs:GetLogEvents",
+				"logs:FilterLogEvents",
+				"logs:DescribeLogGroups"
+			],
+			"Resource": "arn:aws:logs:us-east-1:<acc-id>:log-group:/aws/sagemaker/*"
+		},
+		{
+			"Sid": "AllowLambdaManagement",
+			"Effect": "Allow",
+			"Action": [
+				"lambda:CreateFunction",
+				"lambda:UpdateFunctionCode",
+				"lambda:UpdateFunctionConfiguration",
+				"lambda:ListFunctions",
+				"lambda:GetFunction",
+				"lambda:DeleteFunction",
+				"lambda:InvokeFunction",
+				"lambda:AddPermission",
+				"lambda:RemovePermission"
+			],
+			"Resource": "*"
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"iam:PassRole"
+			],
+			"Resource": "arn:aws:iam::<acc-id>:role/ContentModerationLambdaRole"
+		},
+		{
+			"Sid": "AllowLambdaLogAccess",
+			"Effect": "Allow",
+			"Action": [
+				"logs:CreateLogGroup",
+				"logs:CreateLogStream",
+				"logs:PutLogEvents"
+			],
+			"Resource": "arn:aws:logs:us-east-1:<acc-id>:log-group:/aws/lambda/*"
+		},
+		{
+			"Sid": "AllowListingAPIs",
+			"Effect": "Allow",
+			"Action": [
+				"apigateway:GET"
+			],
+			"Resource": [
+				"arn:aws:apigateway:us-east-1::/restapis",
+				"arn:aws:apigateway:us-east-1::/restapis/*"
+			]
+		},
+		{
+			"Sid": "AllowManagingAPIs",
+			"Effect": "Allow",
+			"Action": [
+				"apigateway:POST",
+				"apigateway:PUT",
+				"apigateway:PATCH",
+				"apigateway:DELETE"
+			],
+			"Resource": [
+				"arn:aws:apigateway:us-east-1::/restapis",
+				"arn:aws:apigateway:us-east-1::/restapis/*"
+			]
+		}
+	]
 }
