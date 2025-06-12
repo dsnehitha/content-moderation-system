@@ -27,7 +27,17 @@ class InfrastructureSetup:
         bucket_configs = [
             {
                 'name': 'content-moderation-system-datastore',
-                'folders': ['data/raw/', 'data/processed/', 'models/', 'logs/']
+                'folders': [
+                    'data/raw/', 
+                    'data/processed/', 
+                    'data/validated/',  # For SageMaker pipeline validated data
+                    'models/', 
+                    'logs/',
+                    'pipeline/',  # For SageMaker pipeline artifacts
+                    'pipeline/evaluation/',  # For model evaluation results
+                    'pipeline/training/',  # For training artifacts
+                    'pipeline/validation/'  # For validation artifacts
+                ]
             },
             {
                 'name': 'content-moderation-lambda-code',
@@ -256,6 +266,40 @@ class InfrastructureSetup:
         
         return role_arn
     
+    def update_bucket_structure(self):
+        """Update existing S3 buckets with missing pipeline folders"""
+        bucket_name = f"content-moderation-system-datastore-{self.account_id}"
+        
+        # Additional folders needed for SageMaker pipeline
+        pipeline_folders = [
+            'data/validated/',
+            'pipeline/',
+            'pipeline/evaluation/',
+            'pipeline/training/',
+            'pipeline/validation/'
+        ]
+        
+        print(f"🔄 Updating S3 bucket structure: {bucket_name}")
+        
+        try:
+            # Check if bucket exists
+            self.s3.head_bucket(Bucket=bucket_name)
+            
+            # Create missing folders
+            for folder in pipeline_folders:
+                try:
+                    self.s3.put_object(Bucket=bucket_name, Key=folder, Body='')
+                    print(f"✅ Created folder: s3://{bucket_name}/{folder}")
+                except ClientError as e:
+                    print(f"⚠️ Folder may already exist: {folder}")
+            
+            print(f"✅ Bucket structure updated successfully")
+            return True
+            
+        except ClientError as e:
+            print(f"❌ Error updating bucket structure: {e}")
+            return False
+    
     def save_configuration(self, buckets, sagemaker_role, lambda_role):
         """Save configuration to file for other scripts to use"""
         config = {
@@ -294,8 +338,12 @@ class InfrastructureSetup:
         print("\n3. Setting up Lambda IAM role...")
         lambda_role = self.create_lambda_execution_role()
         
+        # Update existing bucket structure
+        print("\n4. Updating S3 bucket structure...")
+        self.update_bucket_structure()
+        
         # Save configuration
-        print("\n4. Saving configuration...")
+        print("\n5. Saving configuration...")
         self.save_configuration(buckets, sagemaker_role, lambda_role)
         
         print("\n" + "=" * 60)
