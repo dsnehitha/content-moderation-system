@@ -39,8 +39,12 @@ def deploy_endpoint():
     if not config:
         return None
     
+    # Check if we should use a pipeline model instead
+    print("🔍 Checking for pipeline models...")
+    
     model_data, model_info = load_model_info()
     if not model_data:
+        print("❌ No trained model found. Please run launch_training.py or sagemaker_pipeline.py first.")
         return None
     
     print("🚀 Deploying SageMaker endpoint...")
