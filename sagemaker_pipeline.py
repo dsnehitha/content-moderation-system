@@ -41,6 +41,7 @@ class ContentModerationPipeline:
         print(f"📍 Region: {self.region}")
         print(f"🔐 Role: {self.role}")
         print(f"📦 Bucket: {self.bucket}")
+        print(f"🗄️ Storage: Direct S3 integration")
     
     def load_sagemaker_role(self):
         """Load SageMaker execution role from config"""
@@ -63,149 +64,7 @@ class ContentModerationPipeline:
     def create_data_validation_step(self):
         """Create simplified data validation step"""
         
-        # Create streamlined data validation script
-        validation_script = '''
-        import pandas as pd
-        import numpy as np
-        import json
-        import argparse
-        import os
-        import sys
-
-        def validate_and_prepare_data(input_path, output_path):
-            """Validate training data and prepare for training"""
-            
-            print("🔍 Starting data validation and preparation...")
-            print(f"Input path: {input_path}")
-            print(f"Output path: {output_path}")
-            
-            # List all files in input path
-            print("Files in input path:")
-            for root, dirs, files in os.walk(input_path):
-                for file in files:
-                    print(f"  {os.path.join(root, file)}")
-            
-            # Load data files
-            train_file = os.path.join(input_path, "train_data.csv")
-            test_file = os.path.join(input_path, "test_data.csv")
-            
-            print(f"Looking for train file: {train_file}")
-            print(f"Looking for test file: {test_file}")
-            
-            if not os.path.exists(train_file):
-                print(f"❌ Train file not found at {train_file}")
-                sys.exit(1)
-            
-            if not os.path.exists(test_file):
-                print(f"❌ Test file not found at {test_file}")
-                sys.exit(1)
-            
-            try:
-                train_data = pd.read_csv(train_file)
-                test_data = pd.read_csv(test_file)
-                print(f"✅ Data files loaded successfully")
-                print(f"   Train shape: {train_data.shape}")
-                print(f"   Test shape: {test_data.shape}")
-                
-            except Exception as e:
-                print(f"❌ Error loading data files: {e}")
-                sys.exit(1)
-            
-            # Basic validation checks
-            validation_report = {
-                "validation_passed": True,
-                "issues": [],
-                "statistics": {}
-            }
-            
-            # Check required columns
-            required_cols = ['comment_text', 'toxic']
-            for df_name, df in [('train', train_data), ('test', test_data)]:
-                missing_cols = [col for col in required_cols if col not in df.columns]
-                if missing_cols:
-                    validation_report["issues"].append(f"{df_name} missing columns: {missing_cols}")
-                    validation_report["validation_passed"] = False
-            
-            # Check for missing values
-            if validation_report["validation_passed"]:
-                train_missing = train_data[required_cols].isnull().sum().sum()
-                test_missing = test_data[required_cols].isnull().sum().sum()
-                
-                if train_missing > 0 or test_missing > 0:
-                    validation_report["issues"].append(f"Missing values: train={train_missing}, test={test_missing}")
-                    validation_report["validation_passed"] = False
-            
-            # Check data size
-            if len(train_data) < 100:
-                validation_report["issues"].append(f"Training data too small: {len(train_data)} samples")
-                validation_report["validation_passed"] = False
-            
-            # Calculate statistics
-            validation_report["statistics"] = {
-                "train_samples": int(len(train_data)),
-                "test_samples": int(len(test_data)),
-                "train_toxic_ratio": float(train_data['toxic'].mean()),
-                "test_toxic_ratio": float(test_data['toxic'].mean())
-            }
-            
-            # Create output directory
-            os.makedirs(output_path, exist_ok=True)
-            
-            # Save validation report
-            with open(os.path.join(output_path, "validation_report.json"), 'w') as f:
-                json.dump(validation_report, f, indent=2)
-            
-            if not validation_report["validation_passed"]:
-                print("❌ Data validation failed:", validation_report["issues"])
-                sys.exit(1)
-            
-            # Clean and save data
-            print("✅ Data validation passed - preparing data...")
-            
-            try:
-                # Basic cleaning
-                train_data['comment_text'] = train_data['comment_text'].astype(str).str.strip()
-                test_data['comment_text'] = test_data['comment_text'].astype(str).str.strip()
-                
-                # Remove empty text
-                train_data = train_data[train_data['comment_text'] != '']
-                test_data = test_data[test_data['comment_text'] != '']
-                
-                # Save cleaned data
-                train_data.to_csv(os.path.join(output_path, "train_data.csv"), index=False)
-                test_data.to_csv(os.path.join(output_path, "test_data.csv"), index=False)
-                
-                print(f"✅ Data preparation completed:")
-                print(f"   📊 Training samples: {len(train_data)}")
-                print(f"   📊 Test samples: {len(test_data)}")
-                print(f"   📊 Training toxic ratio: {train_data['toxic'].mean():.3f}")
-                
-            except Exception as e:
-                print(f"❌ Error during data preparation: {e}")
-                sys.exit(1)
-            
-            return True
-
-        if __name__ == "__main__":
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--input-path", type=str, default="/opt/ml/processing/input")
-            parser.add_argument("--output-path", type=str, default="/opt/ml/processing/output")
-            
-            args = parser.parse_args()
-            
-            try:
-                validate_and_prepare_data(args.input_path, args.output_path)
-                print("✅ Data validation completed successfully")
-            except Exception as e:
-                print(f"❌ Data validation failed: {e}")
-                sys.exit(1)
-        '''
-        # Save validation script
-        os.makedirs("pipeline_scripts", exist_ok=True)
-        with open("pipeline_scripts/data_validation.py", 'w') as f:
-            f.write(validation_script)
-        
-        # Create script processor for data validation
+        # Use the existing validated data validation script instead of inline
         validation_processor = ScriptProcessor(
             image_uri=sagemaker.image_uris.retrieve(
                 framework="sklearn",
@@ -222,11 +81,11 @@ class ContentModerationPipeline:
             command=["python3"]
         )
         
-        # Define processing step
+        # Define processing step using existing validation script
         validation_step = ProcessingStep(
             name="DataValidation",
             processor=validation_processor,
-            code="pipeline_scripts/data_validation.py",
+            code="ml_scripts/data_validation.py",
             inputs=[
                 ProcessingInput(
                     source=f"s3://{self.bucket}/data/raw/",
@@ -239,7 +98,8 @@ class ContentModerationPipeline:
                     source="/opt/ml/processing/output",
                     destination=f"s3://{self.bucket}/data/validated/"
                 )
-            ]
+            ],
+            job_arguments=["--input-path", "/opt/ml/processing/input", "--output-path", "/opt/ml/processing/output"]
         )
         
         return validation_step
@@ -249,7 +109,7 @@ class ContentModerationPipeline:
         
         # Use existing train.py script - no need to duplicate training logic
         sklearn_estimator = SKLearn(
-            entry_point="train.py",  # Use existing comprehensive training script
+            entry_point="ml_scripts/train.py",  # Use consolidated training script
             role=self.role,
             instance_type="ml.m5.large",  # Use fixed instance type to avoid parameter issues
             framework_version="0.23-1",
@@ -259,12 +119,16 @@ class ContentModerationPipeline:
             sagemaker_session=self.sagemaker_session,
         )
         
-        # Define training step with static S3 path - dependency will ensure data is ready
+        # Define training step with both train and test data channels
         training_step = TrainingStep(
             name="TrainContentModerationModel",
             estimator=sklearn_estimator,
             inputs={
                 "train": sagemaker.inputs.TrainingInput(
+                    s3_data=f"s3://{self.bucket}/data/validated/",
+                    content_type="text/csv"
+                ),
+                "test": sagemaker.inputs.TrainingInput(
                     s3_data=f"s3://{self.bucket}/data/validated/",
                     content_type="text/csv"
                 )
@@ -276,114 +140,6 @@ class ContentModerationPipeline:
     
     def create_evaluation_step(self, training_step):
         """Create model evaluation step that extracts metrics from train.py output"""
-        
-        evaluation_script = '''
-        import json
-        import joblib
-        import pandas as pd
-        import numpy as np
-        import argparse
-        import os
-        import tarfile
-
-        def extract_and_format_metrics(model_path, output_path):
-            """Extract metrics from trained model and format for SageMaker"""
-            
-            print("📊 Extracting model evaluation metrics...")
-            
-            # Extract model artifacts from tar.gz
-            with tarfile.open(os.path.join(model_path, "model.tar.gz"), 'r:gz') as tar:
-                tar.extractall(path="/tmp/model")
-            
-            # Load model info (created by train.py)
-            model_info_path = "/tmp/model/model_info.json"
-            if not os.path.exists(model_info_path):
-                print("⚠️ model_info.json not found - creating default metrics")
-                # Create default metrics if model_info.json doesn't exist
-                model_info = {
-                    "cv_mean_accuracy": 0.85,
-                    "cv_mean_precision": 0.80,
-                    "cv_mean_recall": 0.82,
-                    "cv_mean_f1": 0.81,
-                    "cv_mean_roc_auc": 0.88,
-                    "cv_std_accuracy": 0.02,
-                    "validation_accuracy": 0.84,
-                    "cross_validation": True,
-                    "cv_folds": 5
-                }
-            else:
-                with open(model_info_path, 'r') as f:
-                    model_info = json.load(f)
-            
-            # Extract key metrics (train.py already calculated these)
-            metrics = {
-                "accuracy": model_info.get("cv_mean_accuracy", 0.85),
-                "precision": model_info.get("cv_mean_precision", 0.80),
-                "recall": model_info.get("cv_mean_recall", 0.82), 
-                "f1_score": model_info.get("cv_mean_f1", 0.81),
-                "roc_auc": model_info.get("cv_mean_roc_auc", 0.88),
-                "validation_accuracy": model_info.get("validation_accuracy", 0.84)
-            }
-            
-            # Create evaluation result using existing metrics
-            evaluation_result = {
-                "metrics": {
-                    "accuracy": {
-                        "value": float(metrics["accuracy"]),
-                        "standard_deviation": float(model_info.get("cv_std_accuracy", 0.02))
-                    },
-                    "precision": {
-                        "value": float(metrics["precision"]),
-                        "standard_deviation": 0.0
-                    },
-                    "recall": {
-                        "value": float(metrics["recall"]),
-                        "standard_deviation": 0.0
-                    },
-                    "f1_score": {
-                        "value": float(metrics["f1_score"]),
-                        "standard_deviation": 0.0
-                    },
-                    "roc_auc": {
-                        "value": float(metrics["roc_auc"]),
-                        "standard_deviation": 0.0
-                    }
-                },
-                "model_info": model_info,
-                "model_quality": "good" if metrics["accuracy"] > 0.85 else "needs_improvement",
-                "cross_validation_used": model_info.get("cross_validation", False),
-                "cv_folds": model_info.get("cv_folds", 0)
-            }
-            
-            # Save evaluation results
-            os.makedirs(output_path, exist_ok=True)
-            
-            with open(os.path.join(output_path, "evaluation.json"), 'w') as f:
-                json.dump(evaluation_result, f, indent=2)
-            
-            print(f"✅ Model evaluation metrics extracted:")
-            print(f"   📊 CV Accuracy: {metrics['accuracy']:.4f}")
-            print(f"   📊 CV Precision: {metrics['precision']:.4f}")
-            print(f"   📊 CV Recall: {metrics['recall']:.4f}")
-            print(f"   📊 CV F1 Score: {metrics['f1_score']:.4f}")
-            print(f"   📊 CV ROC AUC: {metrics['roc_auc']:.4f}")
-            print(f"   📊 Validation Accuracy: {metrics['validation_accuracy']:.4f}")
-            
-            return evaluation_result
-
-        if __name__ == "__main__":
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--model-path", type=str, required=True)
-            parser.add_argument("--output-path", type=str, required=True)
-            
-            args = parser.parse_args()
-            
-            extract_and_format_metrics(args.model_path, args.output_path)
-        '''
-        
-        # Save evaluation script
-        with open("pipeline_scripts/model_evaluation.py", 'w') as f:
-            f.write(evaluation_script)
         
         # Create evaluation processor
         evaluation_processor = ScriptProcessor(
@@ -406,7 +162,7 @@ class ContentModerationPipeline:
         evaluation_step = ProcessingStep(
             name="EvaluateModel",
             processor=evaluation_processor,
-            code="pipeline_scripts/model_evaluation.py",
+            code="ml_scripts/model_evaluation.py",
             inputs=[
                 ProcessingInput(
                     source=training_step.properties.ModelArtifacts.S3ModelArtifacts,
@@ -501,18 +257,36 @@ class ContentModerationPipeline:
             raise e
         
         # Save pipeline information
+        deployment_time = time.strftime('%Y-%m-%d %H:%M:%S')
+        pipeline_arn = pipeline.describe()["PipelineArn"]
+        
         pipeline_info = {
             "pipeline_name": self.pipeline_name,
-            "pipeline_arn": pipeline.describe()["PipelineArn"],
+            "pipeline_arn": pipeline_arn,
             "region": self.region,
             "bucket": self.bucket,
             "role": self.role,
-            "deployment_time": time.strftime('%Y-%m-%d %H:%M:%S'),
+            "deployment_time": deployment_time,
             "status": "deployed"
         }
         
+        # Save locally
         with open("pipeline_info.json", 'w') as f:
             json.dump(pipeline_info, f, indent=2)
+        
+        # Save to S3 bucket as well
+        try:
+            s3_client = boto3.client('s3', region_name=self.region)
+            s3_key = f"pipeline/info/{self.pipeline_name}_info.json"
+            s3_client.put_object(
+                Bucket=self.bucket,
+                Key=s3_key,
+                Body=json.dumps(pipeline_info, indent=2),
+                ContentType='application/json'
+            )
+            print(f"✅ Pipeline info also saved to S3: s3://{self.bucket}/{s3_key}")
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to save pipeline info to S3: {e}")
         
         print(f"📄 Pipeline info saved to pipeline_info.json")
         
@@ -558,13 +332,208 @@ class ContentModerationPipeline:
             "execution_name": pipeline_execution_name,
             "pipeline_name": pipeline_name,
             "start_time": time.strftime('%Y-%m-%d %H:%M:%S'),
-            "status": "executing"
+            "status": "executing",
+            "region": self.region,
+            "bucket": self.bucket
         }
         
+        # Save locally
         with open("pipeline_execution_info.json", 'w') as f:
             json.dump(execution_info, f, indent=2)
         
+        # Save to S3 bucket as well
+        try:
+            s3_client = boto3.client('sagemaker', region_name=self.region)
+            s3_key = f"pipeline/executions/{pipeline_execution_name}_execution.json"
+            s3_client = boto3.client('s3', region_name=self.region)
+            s3_client.put_object(
+                Bucket=self.bucket,
+                Key=s3_key,
+                Body=json.dumps(execution_info, indent=2),
+                ContentType='application/json'
+            )
+            print(f"✅ Execution info also saved to S3: s3://{self.bucket}/{s3_key}")
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to save execution info to S3: {e}")
+        
         return execution_arn
+    
+    def save_pipeline_model_info(self, execution_arn):
+        """Save model information after pipeline execution completes"""
+        
+        print("🔍 Checking pipeline execution status and saving model info...")
+        
+        sm_client = boto3.client('sagemaker', region_name=self.region)
+        
+        try:
+            # Get execution details
+            execution_response = sm_client.describe_pipeline_execution(
+                PipelineExecutionArn=execution_arn
+            )
+            
+            execution_status = execution_response['PipelineExecutionStatus']
+            print(f"Pipeline execution status: {execution_status}")
+            
+            if execution_status == 'Succeeded':
+                # List pipeline execution steps to find training job
+                steps_response = sm_client.list_pipeline_execution_steps(
+                    PipelineExecutionArn=execution_arn
+                )
+                
+                training_job_name = None
+                model_data = None
+                
+                # Find the training step
+                for step in steps_response['PipelineExecutionSteps']:
+                    if step['StepName'] == 'TrainContentModerationModel':
+                        if 'Metadata' in step and 'TrainingJob' in step['Metadata']:
+                            training_job_name = step['Metadata']['TrainingJob']['Arn'].split('/')[-1]
+                            break
+                
+                if training_job_name:
+                    # Get training job details
+                    training_response = sm_client.describe_training_job(
+                        TrainingJobName=training_job_name
+                    )
+                    
+                    model_data = training_response['ModelArtifacts']['S3ModelArtifacts']
+                    
+                    # Create model info similar to launch_training.py
+                    model_info = {
+                        'model_data': model_data,
+                        'training_job_name': training_job_name,
+                        'framework_version': '0.23-1',
+                        'instance_type': training_response.get('ResourceConfig', {}).get('InstanceType', 'ml.m5.large'),
+                        'model_type': 'pipeline',
+                        'pipeline_execution_time': time.time(),
+                        'pipeline_execution_arn': execution_arn,
+                        'training_start_time': training_response.get('TrainingStartTime', '').isoformat() if training_response.get('TrainingStartTime') else '',
+                        'training_end_time': training_response.get('TrainingEndTime', '').isoformat() if training_response.get('TrainingEndTime') else '',
+                        'training_job_status': training_response.get('TrainingJobStatus', 'Unknown'),
+                        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+                        'region': self.region
+                    }
+                    
+                    # Save locally (this will be picked up by deploy_endpoint.py)
+                    with open('pipeline_model_info.json', 'w') as f:
+                        json.dump(model_info, f, indent=2)
+                    
+                    # Save model path to model_path.txt for immediate compatibility
+                    with open('model_path.txt', 'w') as f:
+                        f.write(model_data)
+                    
+                    # Save to S3 bucket as well
+                    try:
+                        s3_client = boto3.client('s3', region_name=self.region)
+                        s3_key = f"models/pipeline_model_info_{int(time.time())}.json"
+                        s3_client.put_object(
+                            Bucket=self.bucket,
+                            Key=s3_key,
+                            Body=json.dumps(model_info, indent=2),
+                            ContentType='application/json'
+                        )
+                        print(f"✅ Pipeline model info also saved to S3: s3://{self.bucket}/{s3_key}")
+                    except Exception as e:
+                        print(f"⚠️ Warning: Failed to save model info to S3: {e}")
+                    
+                    print(f"✅ Pipeline model information saved!")
+                    print(f"📁 Model location: {model_data}")
+                    print(f"🏷️  Training job: {training_job_name}")
+                    print(f"📝 Model path also saved to model_path.txt for compatibility")
+                    
+                    return model_data
+                else:
+                    print("❌ Could not find training job in pipeline execution")
+                    return None
+            else:
+                print(f"⏳ Pipeline execution not yet completed (status: {execution_status})")
+                print("💡 You can run this method later when the pipeline completes")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Failed to save pipeline model info: {e}")
+            return None
+
+    def approve_latest_model(self):
+        """Approve the latest model package in the model registry"""
+        
+        print("🔍 Finding and approving latest model package...")
+        
+        sm_client = boto3.client('sagemaker', region_name=self.region)
+        
+        try:
+            # List model packages for our model group
+            response = sm_client.list_model_packages(
+                ModelPackageGroupName="content-moderation-model-group",
+                ModelApprovalStatus="PendingManualApproval",
+                SortBy="CreationTime",
+                SortOrder="Descending",
+                MaxResults=1
+            )
+            
+            if not response['ModelPackageSummaryList']:
+                print("❌ No pending model packages found for approval")
+                return False
+            
+            # Get the latest pending model package
+            latest_model = response['ModelPackageSummaryList'][0]
+            model_package_arn = latest_model['ModelPackageArn']
+            
+            print(f"📦 Found pending model: {model_package_arn}")
+            
+            # Approve the model
+            sm_client.update_model_package(
+                ModelPackageArn=model_package_arn,
+                ModelApprovalStatus='Approved'
+            )
+            
+            print(f"✅ Model approved successfully!")
+            print(f"🔗 Model Package ARN: {model_package_arn}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Failed to approve model: {e}")
+            return False
+    
+    def list_model_packages(self):
+        """List all model packages in the model registry"""
+        
+        print("📋 Listing model packages...")
+        
+        sm_client = boto3.client('sagemaker', region_name=self.region)
+        
+        try:
+            # List all model packages
+            response = sm_client.list_model_packages(
+                ModelPackageGroupName="content-moderation-model-group"
+            )
+            
+            if not response['ModelPackageSummaryList']:
+                print("❌ No model packages found")
+                return []
+            
+            models = response['ModelPackageSummaryList']
+            
+            print(f"📊 Found {len(models)} model packages:")
+            print("-" * 80)
+            
+            for i, model in enumerate(models, 1):
+                status = model['ModelApprovalStatus']
+                status_emoji = "✅" if status == "Approved" else "⏳" if status == "PendingManualApproval" else "❌"
+                
+                print(f"{i}. {status_emoji} Status: {status}")
+                print(f"   ARN: {model['ModelPackageArn']}")
+                print(f"   Created: {model['CreationTime']}")
+                if 'ModelPackageDescription' in model:
+                    print(f"   Description: {model['ModelPackageDescription']}")
+                print("-" * 80)
+            
+            return models
+            
+        except Exception as e:
+            print(f"❌ Failed to list model packages: {e}")
+            return []
 
 def main():
     """Main function to demonstrate pipeline deployment and execution"""
@@ -588,8 +557,35 @@ def main():
         print(f"📋 Next steps:")
         print(f"1. Monitor execution in SageMaker Console")
         print(f"2. Check pipeline_execution_info.json for status")
-        print(f"3. Run 'python bedrock_integration.py' for Bedrock setup")
-        print(f"4. Set up monitoring with 'python cloudwatch_monitoring.py'")
+        print(f"3. When pipeline completes, model info will be automatically available")
+        print(f"4. Run 'python deploy_endpoint.py' to deploy the pipeline model")
+        print(f"5. Run 'python bedrock_integration.py' for Bedrock setup")
+        print(f"6. Approve model: python -c \"from sagemaker_pipeline import ContentModerationPipeline; p=ContentModerationPipeline(); p.approve_latest_model()\"")
+        
+        # Optional: Wait for pipeline to complete and save model info
+        user_input = input("\n❓ Do you want to wait for pipeline completion and save model info? (y/n): ")
+        if user_input.lower() == 'y':
+            print("⏳ Waiting for pipeline to complete...")
+            import time
+            while True:
+                model_data = cm_pipeline.save_pipeline_model_info(execution_arn)
+                if model_data:
+                    print(f"\n🎉 Pipeline model ready for deployment!")
+                    
+                    # Ask if user wants to approve the model
+                    approve_input = input("\n❓ Do you want to approve the model now? (y/n): ")
+                    if approve_input.lower() == 'y':
+                        cm_pipeline.approve_latest_model()
+                    
+                    break
+                else:
+                    print("⏳ Still waiting... (checking again in 60 seconds)")
+                    time.sleep(60)
+        else:
+            print(f"\n💡 You can save model info later by running:")
+            print(f"   python -c \"from sagemaker_pipeline import ContentModerationPipeline; p=ContentModerationPipeline(); p.save_pipeline_model_info('{execution_arn}')\"")
+            print(f"\n💡 You can approve models by running:")
+            print(f"   python -c \"from sagemaker_pipeline import ContentModerationPipeline; p=ContentModerationPipeline(); p.approve_latest_model()\"")
         
     except Exception as e:
         print(f"❌ Pipeline setup failed: {e}")

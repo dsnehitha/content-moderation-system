@@ -3,6 +3,7 @@ import sagemaker
 from sagemaker.sklearn.estimator import SKLearn
 import json
 import os
+import time
 
 def load_aws_config():
     """Load AWS configuration from setup"""
@@ -30,7 +31,7 @@ def launch_training_job():
     
     # Create sklearn estimator
     sklearn_estimator = SKLearn(
-        entry_point='train.py',
+        entry_point='ml_scripts/train.py',
         role=config['sagemaker_role'],
         instance_type='ml.m5.large',
         framework_version='0.23-1',
@@ -60,14 +61,34 @@ def launch_training_job():
             'model_data': model_data,
             'training_job_name': sklearn_estimator.latest_training_job.name,
             'framework_version': '0.23-1',
-            'instance_type': 'ml.m5.large'
+            'instance_type': 'ml.m5.large',
+            'model_type': 'standalone',
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'region': config.get('region', 'us-east-1')
         }
         
+        # Save locally
         with open('model_path.txt', 'w') as f:
             f.write(model_data)
         
         with open('model_info.json', 'w') as f:
             json.dump(model_info, f, indent=2)
+        
+        # Save to S3 bucket as well
+        try:
+            s3_client = boto3.client('s3', region_name=config.get('region', 'us-east-1'))
+            
+            # Save model info to S3
+            s3_key = f"models/standalone_model_info_{int(time.time())}.json"
+            s3_client.put_object(
+                Bucket=config['datastore_bucket'],
+                Key=s3_key,
+                Body=json.dumps(model_info, indent=2),
+                ContentType='application/json'
+            )
+            print(f"✅ Model info also saved to S3: s3://{config['datastore_bucket']}/{s3_key}")
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to save model info to S3: {e}")
         
         print("✅ Training job completed successfully!")
         print(f"📁 Model artifacts saved at: {model_data}")
@@ -106,7 +127,7 @@ if __name__ == "__main__":
     if not check_data_availability():
         print("\n🔄 Uploading training data to S3...")
         # Try to upload data if it exists locally
-        if os.path.exists('train_data.csv'):
+        if os.path.exists('data/train_data.csv'):
             exec(open('data_preparation.py').read())
         else:
             print("❌ No local training data found. Please run data_preparation.py first.")
