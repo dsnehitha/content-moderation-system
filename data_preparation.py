@@ -113,11 +113,12 @@ def upload_to_s3(df_train, df_test, bucket_name):
             else:
                 print(f"Error creating bucket: {e}")
         
-        # df_train.to_csv('train_data.csv', index=False)
-        # df_test.to_csv('test_data.csv', index=False)
+        # Upload from the data directory
+        train_path = os.path.join('data', 'train_data.csv')
+        test_path = os.path.join('data', 'test_data.csv')
         
-        s3_client.upload_file('train_data.csv', bucket_name, 'data/raw/train_data.csv')
-        s3_client.upload_file('test_data.csv', bucket_name, 'data/raw/test_data.csv')
+        s3_client.upload_file(train_path, bucket_name, 'data/raw/train_data.csv')
+        s3_client.upload_file(test_path, bucket_name, 'data/raw/test_data.csv')
         
         print(f"Data uploaded to s3://{bucket_name}/data/raw/")
         return True
@@ -130,11 +131,19 @@ if __name__ == "__main__":
     print("Creating enhanced sample data...")
     df = create_enhanced_sample_data()
     
+    # Create data directory if it doesn't exist
+    data_dir = 'data'
+    os.makedirs(data_dir, exist_ok=True)
+    
     # Split the data
     train_df, test_df = train_test_split(df, test_size=0.2, random_state=42, stratify=df['toxic'])
     
-    train_df.to_csv('train_data.csv', index=False)
-    test_df.to_csv('test_data.csv', index=False)
+    # Save files to data directory
+    train_path = os.path.join(data_dir, 'train_data.csv')
+    test_path = os.path.join(data_dir, 'test_data.csv')
+    
+    train_df.to_csv(train_path, index=False)
+    test_df.to_csv(test_path, index=False)
     
     print(f"Training data length: {len(train_df)}")
     print(f"Test data length: {len(test_df)}")
@@ -149,7 +158,7 @@ if __name__ == "__main__":
         upload_to_s3(train_df, test_df, bucket_name)
     except FileNotFoundError:
         print("\nSkipping S3 upload - run setup_infrastructure.py first")
-        print("Data saved locally as train_data.csv and test_data.csv")
+        print(f"Data saved locally in '{data_dir}/' folder as train_data.csv and test_data.csv")
     except Exception as e:
         print(f"\nError uploading to S3: {e}")
-        print("Data saved locally as train_data.csv and test_data.csv")
+        print(f"Data saved locally in '{data_dir}/' folder as train_data.csv and test_data.csv")
