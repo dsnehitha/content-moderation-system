@@ -14,7 +14,20 @@ def load_aws_config():
         return None
 
 def load_model_info():
-    """Load model information from training"""
+    """Load model information from training - prioritize pipeline model"""
+    
+    # First, try to load pipeline model (preferred)
+    try:
+        with open('pipeline_model_info.json', 'r') as f:
+            pipeline_model_info = json.load(f)
+        
+        print("✅ Found pipeline model - using pipeline-trained model")
+        return pipeline_model_info['model_data'], pipeline_model_info
+        
+    except FileNotFoundError:
+        print("🔍 No pipeline model found, checking for standalone training model...")
+    
+    # Fallback to standalone training model
     try:
         with open('model_path.txt', 'r') as f:
             model_data = f.read().strip()
@@ -26,9 +39,11 @@ def load_model_info():
         except FileNotFoundError:
             model_info = {}
         
+        print("✅ Found standalone training model")
         return model_data, model_info
+        
     except FileNotFoundError:
-        print("❌ model_path.txt not found. Please run launch_training.py first.")
+        print("❌ No trained model found. Please run sagemaker_pipeline.py first (preferred) or launch_training.py as fallback.")
         return None, None
 
 def deploy_endpoint():
@@ -44,18 +59,24 @@ def deploy_endpoint():
     
     model_data, model_info = load_model_info()
     if not model_data:
-        print("❌ No trained model found. Please run launch_training.py or sagemaker_pipeline.py first.")
+        print("❌ No trained model found. Please run sagemaker_pipeline.py first (preferred) or launch_training.py as fallback.")
         return None
     
     print("🚀 Deploying SageMaker endpoint...")
     print(f"📁 Model location: {model_data}")
     print(f"🔐 Using role: {config['sagemaker_role']}")
     
+    # Indicate which model type is being used
+    if 'pipeline_execution_time' in model_info:
+        print(f"🔧 Using PIPELINE model (training job: {model_info.get('training_job_name', 'unknown')})")
+    else:
+        print(f"🔧 Using STANDALONE model (training job: {model_info.get('training_job_name', 'unknown')})")
+    
     # Create model
     sklearn_model = SKLearnModel(
         model_data=model_data,
         role=config['sagemaker_role'],
-        entry_point='train.py',
+        entry_point='ml_scripts/train.py',
         framework_version='0.23-1',
         py_version='py3',
         name=f"content-moderation-model-{int(time.time())}"
@@ -117,11 +138,28 @@ def deploy_endpoint():
             'deployment_time': time.strftime('%Y-%m-%d %H:%M:%S'),
             'region': config.get('region', 'us-east-1'),
             'model_info': model_info if model_info else {},
+            'model_type': 'pipeline' if 'pipeline_execution_time' in model_info else 'standalone',
+            'training_job_name': model_info.get('training_job_name', 'unknown'),
             'status': 'deployed'
         }
         
+        # Save locally
         with open('endpoint_info.json', 'w') as f:
             json.dump(endpoint_info, f, indent=2)
+        
+        # Save to S3 bucket as well
+        try:
+            s3_client = boto3.client('s3', region_name=config.get('region', 'us-east-1'))
+            s3_key = f"endpoints/{endpoint_name}_info.json"
+            s3_client.put_object(
+                Bucket=config['datastore_bucket'],
+                Key=s3_key,
+                Body=json.dumps(endpoint_info, indent=2),
+                ContentType='application/json'
+            )
+            print(f"✅ Endpoint info also saved to S3: s3://{config['datastore_bucket']}/{s3_key}")
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to save endpoint info to S3: {e}")
         
         print(f"📊 Endpoint info saved to endpoint_info.json")
         print(f"🎯 Endpoint name: {endpoint_name}")
@@ -163,6 +201,11 @@ def check_existing_endpoint():
 if __name__ == "__main__":
     print("Content Moderation System - Endpoint Deployment")
     print("=" * 50)
+    
+    print("📋 Model Priority Order:")
+    print("   1. Pipeline model (pipeline_model_info.json) - PREFERRED")
+    print("   2. Standalone model (model_path.txt) - Fallback")
+    print()
     
     # Check for existing endpoints first
     print("🔍 Checking for existing endpoints...")
