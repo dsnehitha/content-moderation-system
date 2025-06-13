@@ -3,6 +3,8 @@ import boto3
 from datetime import datetime
 import time
 import logging
+import re
+import html
 from bedrock_integration import BedrockModerationIntegration
 
 # Initialize CloudWatch client for custom metrics
@@ -71,37 +73,115 @@ def lambda_handler(event, context):
             send_cloudwatch_metric('BedrockAnalysisError', 1)
             return None
     
-    def call_preprocessing_lambda(text, metadata=None):
-        """Call the preprocessing Lambda function"""
+    def preprocess_text(text, metadata=None):
+        """Preprocess text for content moderation (inline preprocessing)"""
+        
+        def clean_text(text):
+            """Comprehensive text cleaning for content moderation"""
+            if not text or not isinstance(text, str):
+                return ""
+            
+            # Decode HTML entities
+            text = html.unescape(text)
+            
+            # Remove URLs (various formats)
+            text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+            text = re.sub(r'www\.(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+            
+            # Remove email addresses
+            text = re.sub(r'\S+@\S+', '', text)
+            
+            # Remove excessive punctuation (but keep some for context)
+            text = re.sub(r'[.]{3,}', '...', text)  # Normalize ellipsis
+            text = re.sub(r'[!]{2,}', '!!', text)   # Normalize exclamations
+            text = re.sub(r'[?]{2,}', '??', text)   # Normalize questions
+            
+            # Remove excessive whitespace
+            text = re.sub(r'\s+', ' ', text)
+            
+            # Trim and ensure we have content
+            text = text.strip()
+            
+            return text
+        
+        def extract_features(text):
+            """Extract features that might be useful for moderation"""
+            features = {
+                'length': len(text),
+                'word_count': len(text.split()),
+                'has_caps': bool(re.search(r'[A-Z]{3,}', text)),  # Excessive caps
+                'has_repeated_chars': bool(re.search(r'(.)\1{3,}', text)),  # aaaa
+                'exclamation_count': text.count('!'),
+                'question_count': text.count('?'),
+                'has_numbers': bool(re.search(r'\d', text)),
+                'avg_word_length': sum(len(word) for word in text.split()) / max(len(text.split()), 1)
+            }
+            return features
+        
+        def get_risk_indicators(text, features):
+            """Get risk indicators based on text patterns"""
+            risk_score = 0
+            indicators = []
+            
+            # Length-based risks
+            if features['length'] > 1000:
+                risk_score += 1
+                indicators.append('very_long_text')
+            elif features['length'] < 5:
+                risk_score += 1
+                indicators.append('very_short_text')
+            
+            # Pattern-based risks
+            if features['has_caps']:
+                risk_score += 2
+                indicators.append('excessive_caps')
+            
+            if features['has_repeated_chars']:
+                risk_score += 1
+                indicators.append('repeated_characters')
+            
+            if features['exclamation_count'] > 3:
+                risk_score += 1
+                indicators.append('excessive_exclamations')
+            
+            # Content patterns
+            if re.search(r'\b(kill|die|hate|stupid|idiot)\b', text, re.IGNORECASE):
+                risk_score += 3
+                indicators.append('potential_offensive_language')
+            
+            return {
+                'risk_score': risk_score,
+                'indicators': indicators,
+                'needs_human_review': risk_score > 5
+            }
+        
         try:
-            payload = {
-                'text': text,
-                'metadata': metadata or {}
+            original_text = text
+            cleaned_text = clean_text(text)
+            
+            if not cleaned_text:
+                return {
+                    'success': False,
+                    'error': 'Text is empty after cleaning'
+                }
+            
+            features = extract_features(cleaned_text)
+            risk_indicators = get_risk_indicators(cleaned_text, features)
+            
+            return {
+                'success': True,
+                'cleaned_text': cleaned_text,
+                'original_text': original_text,
+                'features': features,
+                'risk_indicators': risk_indicators
             }
             
-            response = lambda_client.invoke(
-                FunctionName='content-moderation-preprocessing',
-                InvocationType='RequestResponse',
-                Payload=json.dumps(payload)
-            )
-            
-            result = json.loads(response['Payload'].read().decode())
-            
-            if result.get('statusCode') == 200:
-                body = json.loads(result['body'])
-                if body.get('success'):
-                    return {
-                        'success': True,
-                        'cleaned_text': body.get('cleaned_text', ''),
-                        'original_text': body.get('original_text', text),
-                        'features': body.get('features', {}),
-                        'risk_indicators': body.get('risk_indicators', {})
-                    }
-            
-            return {'success': False, 'error': 'Preprocessing failed'}
-            
         except Exception as e:
-            return {'success': False, 'error': f'Preprocessing error: {str(e)}'}
+            logger.error(f"Preprocessing error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Preprocessing failed: {str(e)}'
+            }
     
     def make_moderation_decision(toxicity_score, features=None):
         """
@@ -169,8 +249,8 @@ def lambda_handler(event, context):
                 })
             }
         
-        # Always call preprocessing Lambda to ensure consistent processing
-        preprocess_result = call_preprocessing_lambda(raw_text, body.get('metadata'))
+        # Preprocess text inline (no external Lambda needed)
+        preprocess_result = preprocess_text(raw_text, body.get('metadata'))
         
         if not preprocess_result['success']:
             return {

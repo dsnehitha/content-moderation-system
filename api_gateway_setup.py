@@ -111,7 +111,7 @@ class APIGatewaySetup:
             print(f"❌ Error creating API Gateway: {e}")
             return None
     
-    def setup_api_resources_and_methods(self, api_id, preprocessing_function_arn, prediction_function_arn):
+    def setup_api_resources_and_methods(self, api_id, prediction_function_arn):
         """Setup API Gateway resources and methods"""
         try:
             # Get root resource
@@ -173,7 +173,7 @@ class APIGatewaySetup:
                     raise e
             
             # Set up integration for POST method
-            # This will chain: Request -> Preprocessing Lambda -> Prediction Lambda -> Response
+            # Direct integration: Request -> Prediction Lambda -> SageMaker -> Response
             integration_uri = f"arn:aws:apigateway:{self.config['region']}:lambda:path/2015-03-31/functions/{prediction_function_arn}/invocations"
             
             try:
@@ -337,7 +337,7 @@ class APIGatewaySetup:
         print("=" * 60)
         
         # Deploy Lambda functions
-        print("\n1. Deploying Lambda functions...")
+        print("\n1. Deploying Lambda function...")
         
         # Check if functions already exist
         existing_functions = []
@@ -347,16 +347,8 @@ class APIGatewaySetup:
         except Exception as e:
             print(f"⚠️  Could not check existing functions: {e}")
         
-        if 'content-moderation-preprocessing' in existing_functions:
-            print("ℹ️  Preprocessing function already exists - will update")
         if 'content-moderation-prediction' in existing_functions:
             print("ℹ️  Prediction function already exists - will update")
-        
-        preprocessing_arn = self.deploy_lambda_function(
-            'content-moderation-preprocessing',
-            'preprocessing_lambda.py',
-            'Preprocess text for content moderation'
-        )
         
         prediction_arn = self.deploy_lambda_function(
             'content-moderation-prediction',
@@ -364,8 +356,8 @@ class APIGatewaySetup:
             'Get toxicity predictions from SageMaker'
         )
         
-        if not preprocessing_arn or not prediction_arn:
-            print("❌ Failed to deploy Lambda functions")
+        if not prediction_arn:
+            print("❌ Failed to deploy Lambda function")
             return False
         
         # Create API Gateway
@@ -376,7 +368,7 @@ class APIGatewaySetup:
         
         # Setup resources and methods
         print("\n3. Setting up API resources...")
-        resource_id = self.setup_api_resources_and_methods(api_id, preprocessing_arn, prediction_arn)
+        resource_id = self.setup_api_resources_and_methods(api_id, prediction_arn)
         if not resource_id:
             return False
         
@@ -397,7 +389,6 @@ class APIGatewaySetup:
             'endpoints': {
                 'moderate': f"{api_url}/moderate"
             },
-            'preprocessing_function_arn': preprocessing_arn,
             'prediction_function_arn': prediction_arn,
             'deployment_time': time.strftime('%Y-%m-%d %H:%M:%S')
         }

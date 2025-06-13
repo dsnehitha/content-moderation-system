@@ -75,47 +75,6 @@ class ContentModerationTester:
                 exit(1)
             return None
     
-    def test_preprocessing_lambda(self):
-        """Test the preprocessing Lambda function"""
-        print("🧪 Testing Preprocessing Lambda...")
-        
-        if not self.api_info:
-            print("⚠️  Skipping Lambda test - API not deployed")
-            return False
-        
-        function_name = 'content-moderation-preprocessing'
-        success_count = 0
-        
-        for i, test_case in enumerate(self.test_cases[:3], 1):  # Test first 3 cases
-            try:
-                payload = {
-                    "text": test_case["text"],
-                    "metadata": {"test_case": i}
-                }
-                
-                response = self.lambda_client.invoke(
-                    FunctionName=function_name,
-                    Payload=json.dumps(payload)
-                )
-                
-                result = json.loads(response['Payload'].read().decode())
-                
-                if result.get('statusCode') == 200:
-                    body = json.loads(result['body'])
-                    if body.get('success'):
-                        print(f"  ✅ Test {i}: Preprocessing successful")
-                        success_count += 1
-                    else:
-                        print(f"  ❌ Test {i}: Preprocessing failed - {body.get('error')}")
-                else:
-                    print(f"  ❌ Test {i}: HTTP {result.get('statusCode')}")
-                    
-            except Exception as e:
-                print(f"  ❌ Test {i}: Exception - {e}")
-        
-        print(f"📊 Preprocessing Lambda: {success_count}/{min(3, len(self.test_cases))} tests passed")
-        return success_count > 0
-    
     def test_sagemaker_endpoint(self):
         """Test SageMaker endpoint directly"""
         print("🧪 Testing SageMaker Endpoint...")
@@ -322,9 +281,6 @@ class ContentModerationTester:
         test_results = []
         
         # Run individual tests
-        test_results.append(("Preprocessing Lambda", self.test_preprocessing_lambda()))
-        print()
-        
         test_results.append(("SageMaker Endpoint", self.test_sagemaker_endpoint()))
         print()
         
