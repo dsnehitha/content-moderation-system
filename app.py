@@ -1,0 +1,937 @@
+#!/usr/bin/env python3
+"""
+Simple Demo Frontend for Content Moderation System
+==================================================
+
+This creates a simple web interface to test the content moderation system
+with both the direct API and Step Functions workflows.
+"""
+
+import json
+import boto3
+import time
+from flask import Flask, render_template, request, jsonify
+import os
+
+app = Flask(__name__)
+
+class ContentModerationDemo:
+    """Demo interface for content moderation system"""
+    
+    def __init__(self):
+        # Load configurations
+        self.aws_config = self._load_json('aws_config.json')
+        self.api_info = self._load_json('api_info.json', required=False)
+        self.endpoint_info = self._load_json('endpoint_info.json', required=False)
+        
+        # Initialize AWS clients
+        self.sagemaker_runtime = boto3.client('sagemaker-runtime')
+        
+        print("🌐 Demo frontend initialized")
+    
+    def _load_json(self, filename, required=True):
+        """Load JSON configuration file"""
+        try:
+            with open(filename, 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            if required:
+                raise Exception(f"{filename} not found")
+            return None
+    
+    def test_direct_endpoint(self, text):
+        """Test SageMaker endpoint directly"""
+        if not self.endpoint_info:
+            return {"error": "SageMaker endpoint not deployed"}
+        
+        try:
+            start_time = time.time()
+            
+            response = self.sagemaker_runtime.invoke_endpoint(
+                EndpointName=self.endpoint_info['endpoint_name'],
+                ContentType='text/csv',
+                Body=text.strip()
+            )
+            
+            result = json.loads(response['Body'].read().decode())
+            toxicity_score = float(result[0]) if isinstance(result, list) else float(result)
+            
+            processing_time = int((time.time() - start_time) * 1000)
+            
+            # Simple decision logic
+            if toxicity_score > 0.7:
+                action = "block"
+                confidence = "high"
+            elif toxicity_score > 0.5:
+                action = "review"
+                confidence = "medium"
+            else:
+                action = "allow"
+                confidence = "high"
+            
+            return {
+                "method": "Direct SageMaker Endpoint",
+                "toxicity_score": round(toxicity_score, 4),
+                "action": action,
+                "confidence": confidence,
+                "processing_time_ms": processing_time,
+                "success": True
+            }
+            
+        except Exception as e:
+            return {
+                "method": "Direct SageMaker Endpoint",
+                "error": str(e),
+                "success": False
+            }
+    
+    def get_system_status(self):
+        """Get overall system status"""
+        status = {
+            "sagemaker_endpoint": bool(self.endpoint_info),
+            "api_gateway": bool(self.api_info),
+            "components": []
+        }
+        
+        if self.endpoint_info:
+            status["components"].append({
+                "name": "SageMaker Endpoint",
+                "status": "deployed",
+                "endpoint_name": self.endpoint_info['endpoint_name']
+            })
+        
+        if self.api_info:
+            status["components"].append({
+                "name": "API Gateway",
+                "status": "deployed",
+                "api_url": self.api_info.get('api_url', 'unknown')
+            })
+        
+        return status
+
+# Initialize demo instance
+demo = ContentModerationDemo()
+
+@app.route('/')
+def index():
+    """Main demo page"""
+    return render_template('index.html')
+
+@app.route('/api/test', methods=['POST'])
+def test_moderation():
+    """Test content moderation"""
+    data = request.get_json()
+    text = data.get('text', '').strip()
+    
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
+    
+    if len(text) > 1000:
+        return jsonify({"error": "Text too long (max 1000 characters)"}), 400
+    
+    results = {}
+    
+    # Test direct endpoint
+    if demo.endpoint_info:
+        results['direct'] = demo.test_direct_endpoint(text)
+    
+    return jsonify({
+        "text": text,
+        "results": results,
+        "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+    })
+
+@app.route('/api/status')
+def get_status():
+    """Get system status"""
+    return jsonify(demo.get_system_status())
+
+def create_templates():
+    """Create HTML templates for the demo"""
+    
+    os.makedirs('templates', exist_ok=True)
+    
+    # Main HTML template
+    html_template = '''<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Content Moderation Platform</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+                background: #0f1419;
+                background-image: 
+                    radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.1) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+                min-height: 100vh;
+                color: #ffffff;
+                line-height: 1.6;
+            }
+            
+            .container {
+                max-width: 1400px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            
+            .header {
+                text-align: center;
+                margin-bottom: 60px;
+                padding: 40px 0;
+            }
+            
+            .header h1 {
+                font-size: 3.5rem;
+                font-weight: 700;
+                background: linear-gradient(135deg, #ffffff 0%, #a8a8a8 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                margin-bottom: 16px;
+                letter-spacing: -0.02em;
+            }
+            
+            .header .subtitle {
+                font-size: 1.25rem;
+                color: #9ca3af;
+                font-weight: 400;
+                max-width: 600px;
+                margin: 0 auto;
+            }
+            
+            .main-grid {
+                display: grid;
+                grid-template-columns: 1fr 400px;
+                gap: 40px;
+                align-items: start;
+            }
+            
+            @media (max-width: 1200px) {
+                .main-grid {
+                    grid-template-columns: 1fr;
+                    gap: 30px;
+                }
+            }
+            
+            .demo-section {
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 24px;
+                padding: 40px;
+            }
+            
+            .section-title {
+                font-size: 1.5rem;
+                font-weight: 600;
+                color: #ffffff;
+                margin-bottom: 24px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            .input-group {
+                margin-bottom: 24px;
+            }
+            
+            label {
+                display: block;
+                margin-bottom: 12px;
+                font-weight: 500;
+                color: #e5e7eb;
+                font-size: 0.95rem;
+            }
+            
+            textarea {
+                width: 100%;
+                padding: 20px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 2px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+                font-size: 16px;
+                color: #ffffff;
+                resize: vertical;
+                min-height: 140px;
+                transition: all 0.3s ease;
+                font-family: inherit;
+            }
+            
+            textarea::placeholder {
+                color: #9ca3af;
+            }
+            
+            textarea:focus {
+                outline: none;
+                border-color: #3b82f6;
+                background: rgba(255, 255, 255, 0.08);
+                box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+            }
+            
+            .button-group {
+                display: flex;
+                gap: 16px;
+                margin-bottom: 32px;
+            }
+            
+            button {
+                padding: 16px 32px;
+                font-size: 16px;
+                font-weight: 500;
+                border: none;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                flex: 1;
+                font-family: inherit;
+                position: relative;
+                overflow: hidden;
+            }
+            
+            .btn-primary {
+                background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                color: white;
+                box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+            }
+            
+            .btn-primary:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+                background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            }
+            
+            .btn-primary:active {
+                transform: translateY(0);
+            }
+            
+            .btn-secondary {
+                background: rgba(255, 255, 255, 0.05);
+                color: #e5e7eb;
+                border: 2px solid rgba(255, 255, 255, 0.1);
+            }
+            
+            .btn-secondary:hover {
+                background: rgba(255, 255, 255, 0.1);
+                border-color: rgba(255, 255, 255, 0.2);
+                transform: translateY(-1px);
+            }
+            
+            .sidebar {
+                display: flex;
+                flex-direction: column;
+                gap: 24px;
+            }
+            
+            .system-status {
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 20px;
+                padding: 24px;
+            }
+            
+            .status-title {
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #ffffff;
+                margin-bottom: 16px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            
+            .status-grid {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .status-item {
+                display: flex;
+                align-items: center;
+                padding: 12px 16px;
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.05);
+            }
+            
+            .status-indicator {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                margin-right: 12px;
+                flex-shrink: 0;
+            }
+            
+            .status-online { 
+                background: #10b981;
+                box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+            }
+            
+            .status-offline { 
+                background: #ef4444;
+                box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+            }
+            
+            .status-text {
+                color: #e5e7eb;
+                font-size: 0.9rem;
+                font-weight: 500;
+            }
+            
+            .example-section {
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 20px;
+                padding: 24px;
+            }
+            
+            .example-title {
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #ffffff;
+                margin-bottom: 16px;
+            }
+            
+            .example-texts {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .example-card {
+                background: rgba(255, 255, 255, 0.03);
+                padding: 16px;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                border: 1px solid rgba(255, 255, 255, 0.05);
+            }
+            
+            .example-card:hover {
+                background: rgba(255, 255, 255, 0.08);
+                border-color: rgba(59, 130, 246, 0.3);
+                transform: translateY(-1px);
+            }
+            
+            .example-label {
+                font-weight: 500;
+                color: #9ca3af;
+                margin-bottom: 6px;
+                font-size: 0.85rem;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            
+            .example-text {
+                color: #e5e7eb;
+                font-size: 0.9rem;
+                line-height: 1.4;
+            }
+            
+            .results {
+                margin-top: 32px;
+            }
+            
+            .result-card {
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 20px;
+                padding: 24px;
+                margin-bottom: 20px;
+            }
+            
+            .result-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+            
+            .method-name {
+                font-weight: 600;
+                font-size: 1.1rem;
+                color: #ffffff;
+            }
+            
+            .result-details {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 16px;
+            }
+            
+            .detail-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 16px;
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.05);
+            }
+            
+            .detail-label {
+                font-weight: 500;
+                color: #9ca3af;
+                font-size: 0.9rem;
+            }
+            
+            .detail-value {
+                font-weight: 600;
+                font-size: 0.95rem;
+            }
+            
+            .action-allow { color: #10b981; }
+            .action-review { color: #f59e0b; }
+            .action-block { color: #ef4444; }
+            
+            .confidence-high { color: #10b981; }
+            .confidence-medium { color: #f59e0b; }
+            .confidence-low { color: #ef4444; }
+            .loading {
+                display: none;
+                text-align: center;
+                padding: 32px;
+            }
+            
+            .spinner {
+                display: inline-block;
+                width: 32px;
+                height: 32px;
+                border: 3px solid rgba(255, 255, 255, 0.1);
+                border-top: 3px solid #3b82f6;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin-bottom: 16px;
+            }
+            
+            .loading-text {
+                color: #9ca3af;
+                font-weight: 500;
+            }
+            
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            
+            .analyzed-text {
+                background: rgba(59, 130, 246, 0.05);
+                border: 1px solid rgba(59, 130, 246, 0.2);
+                color: #e5e7eb;
+                padding: 20px;
+                border-radius: 12px;
+                font-style: italic;
+                line-height: 1.5;
+            }
+            
+            .error-message {
+                color: #ef4444;
+                background: rgba(239, 68, 68, 0.1);
+                border: 1px solid rgba(239, 68, 68, 0.2);
+                padding: 16px;
+                border-radius: 12px;
+            }
+            
+            .about-section {
+                margin-top: 80px;
+                background: rgba(255, 255, 255, 0.03);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 24px;
+                padding: 40px;
+            }
+            
+            .about-title {
+                font-size: 2rem;
+                font-weight: 600;
+                color: #ffffff;
+                margin-bottom: 24px;
+                text-align: center;
+            }
+            
+            .about-content {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 32px;
+                margin-bottom: 32px;
+            }
+            
+            .feature-card {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+                padding: 24px;
+            }
+            
+            .feature-icon {
+                font-size: 2rem;
+                margin-bottom: 16px;
+                display: block;
+            }
+            
+            .feature-title {
+                font-size: 1.2rem;
+                font-weight: 600;
+                color: #ffffff;
+                margin-bottom: 12px;
+            }
+            
+            .feature-description {
+                color: #9ca3af;
+                line-height: 1.6;
+                font-size: 0.95rem;
+            }
+            
+            .tech-stack {
+                margin-top: 32px;
+                text-align: center;
+            }
+            
+            .tech-title {
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #ffffff;
+                margin-bottom: 16px;
+            }
+            
+            .tech-items {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 12px;
+            }
+            
+            .tech-item {
+                background: rgba(59, 130, 246, 0.1);
+                color: #93c5fd;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-size: 0.9rem;
+                font-weight: 500;
+                border: 1px solid rgba(59, 130, 246, 0.2);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>AI Content Moderation Platform</h1>
+                <p class="subtitle">Real-time toxicity detection and content analysis using advanced machine learning models deployed on AWS SageMaker</p>
+            </div>
+            
+            <div class="main-grid">
+                <!-- Main Demo Section -->
+                <div class="demo-section">
+                    <h2 class="section-title">
+                        <span>🔍</span>
+                        Content Analysis
+                    </h2>
+                    
+                    <div class="input-group">
+                        <label for="contentText">Enter content for analysis</label>
+                        <textarea id="contentText" placeholder="Type or paste content here for real-time toxicity analysis..."></textarea>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button class="btn-primary" onclick="testModeration()">
+                            Analyze Content
+                        </button>
+                        <button class="btn-secondary" onclick="clearResults()">
+                            Clear Results
+                        </button>
+                    </div>
+                    
+                    <!-- Loading Indicator -->
+                    <div class="loading" id="loading">
+                        <div class="spinner"></div>
+                        <p class="loading-text">Processing content...</p>
+                    </div>
+                    
+                    <!-- Results -->
+                    <div class="results" id="results"></div>
+                </div>
+                
+                <!-- Sidebar -->
+                <div class="sidebar">
+                    <!-- System Status -->
+                    <div class="system-status">
+                        <h3 class="status-title">
+                            <span>⚡</span>
+                            System Status
+                        </h3>
+                        <div class="status-grid" id="systemStatus">
+                            <!-- Status will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Example Texts -->
+                    <div class="example-section">
+                        <h3 class="example-title">Test Examples</h3>
+                        <div class="example-texts">
+                            <div class="example-card" onclick="setExampleText(this)">
+                                <div class="example-label">High Toxicity</div>
+                                <div class="example-text">"You are such an idiot, I hate you!"</div>
+                            </div>
+                            <div class="example-card" onclick="setExampleText(this)">
+                                <div class="example-label">Negative Opinion</div>
+                                <div class="example-text">"That movie was terrible, what a waste of time."</div>
+                            </div>
+                            <div class="example-card" onclick="setExampleText(this)">
+                                <div class="example-label">Gaming Context</div>
+                                <div class="example-text">"I'm going to destroy you in this game!"</div>
+                            </div>
+                            <div class="example-card" onclick="setExampleText(this)">
+                                <div class="example-label">Positive Content</div>
+                                <div class="example-text">"Thank you so much for your help! You're amazing!"</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- About Section -->
+            <div class="about-section">
+                <h2 class="about-title">About This Project</h2>
+                
+                <div class="about-content">
+                    <div class="feature-card">
+                        <span class="feature-icon">🤖</span>
+                        <h3 class="feature-title">Advanced ML Models</h3>
+                        <p class="feature-description">
+                            Utilizes state-of-the-art machine learning models for toxicity detection, trained on large-scale datasets to identify harmful content with high accuracy and minimal false positives.
+                        </p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <span class="feature-icon">⚡</span>
+                        <h3 class="feature-title">Real-time Processing</h3>
+                        <p class="feature-description">
+                            Built for speed with millisecond response times. SageMaker endpoints provide scalable, real-time inference capabilities that can handle high-volume content moderation tasks.
+                        </p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <span class="feature-icon">🔒</span>
+                        <h3 class="feature-title">Enterprise Security</h3>
+                        <p class="feature-description">
+                            Deployed on AWS with enterprise-grade security, encryption at rest and in transit, and compliance with data protection regulations for handling sensitive content.
+                        </p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <span class="feature-icon">📊</span>
+                        <h3 class="feature-title">Comprehensive Analytics</h3>
+                        <p class="feature-description">
+                            Provides detailed toxicity scores, confidence levels, and actionable insights to help content moderators make informed decisions about user-generated content.
+                        </p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <span class="feature-icon">🔧</span>
+                        <h3 class="feature-title">Scalable Architecture</h3>
+                        <p class="feature-description">
+                            Built with AWS serverless technologies and auto-scaling capabilities to handle traffic spikes and provide consistent performance across different workloads.
+                        </p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <span class="feature-icon">🎯</span>
+                        <h3 class="feature-title">Customizable Rules</h3>
+                        <p class="feature-description">
+                            Flexible threshold settings and customizable moderation policies allow organizations to tailor the system to their specific content guidelines and community standards.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="tech-stack">
+                    <h3 class="tech-title">Technology Stack</h3>
+                    <div class="tech-items">
+                        <span class="tech-item">AWS SageMaker</span>
+                        <span class="tech-item">Python</span>
+                        <span class="tech-item">Scikit-learn</span>
+                        <span class="tech-item">Flask</span>
+                        <span class="tech-item">AWS Lambda</span>
+                        <span class="tech-item">API Gateway</span>
+                        <span class="tech-item">CloudWatch</span>
+                        <span class="tech-item">S3</span>
+                        <span class="tech-item">IAM</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            // Load system status on page load
+            window.onload = function() {
+                loadSystemStatus();
+            };
+            
+            function loadSystemStatus() {
+                fetch('/api/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        const statusContainer = document.getElementById('systemStatus');
+                        statusContainer.innerHTML = '';
+                        
+                        data.components.forEach(component => {
+                            const statusItem = document.createElement('div');
+                            statusItem.className = 'status-item';
+                            statusItem.innerHTML = `
+                                <span class="status-indicator status-online"></span>
+                                <span class="status-text">${component.name}: ${component.status}</span>
+                            `;
+                            statusContainer.appendChild(statusItem);
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error loading status:', error);
+                    });
+            }
+            
+            function setExampleText(element) {
+                const text = element.querySelector('.example-text').textContent.replace(/"/g, '');
+                document.getElementById('contentText').value = text;
+            }
+            
+            function testModeration() {
+                const text = document.getElementById('contentText').value.trim();
+                
+                if (!text) {
+                    alert('Please enter some text to moderate');
+                    return;
+                }
+                
+                // Show loading
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('results').innerHTML = '';
+                
+                fetch('/api/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: text })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('loading').style.display = 'none';
+                    displayResults(data);
+                })
+                .catch(error => {
+                    document.getElementById('loading').style.display = 'none';
+                    console.error('Error:', error);
+                    alert('Error testing moderation. Please try again.');
+                });
+            }
+            
+            function displayResults(data) {
+                const resultsContainer = document.getElementById('results');
+                resultsContainer.innerHTML = '';
+                
+                // Add analyzed text
+                const textDisplay = document.createElement('div');
+                textDisplay.className = 'result-card';
+                textDisplay.innerHTML = `
+                    <div class="result-header">
+                        <span class="method-name">📝 Analyzed Content</span>
+                    </div>
+                    <div class="analyzed-text">
+                        "${data.text}"
+                    </div>
+                `;
+                resultsContainer.appendChild(textDisplay);
+                
+                // Display results for each method
+                Object.values(data.results).forEach(result => {
+                    const resultCard = document.createElement('div');
+                    resultCard.className = 'result-card';
+                    
+                    if (result.success) {
+                        resultCard.innerHTML = `
+                            <div class="result-header">
+                                <span class="method-name">🤖 ${result.method}</span>
+                            </div>
+                            <div class="result-details">
+                                <div class="detail-item">
+                                    <span class="detail-label">Toxicity Score</span>
+                                    <span class="detail-value">${result.toxicity_score || 'N/A'}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Action</span>
+                                    <span class="detail-value action-${result.action}">${result.action?.toUpperCase() || 'N/A'}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Confidence</span>
+                                    <span class="detail-value confidence-${result.confidence}">${result.confidence?.toUpperCase() || 'N/A'}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Response Time</span>
+                                    <span class="detail-value">${result.processing_time_ms || 0}ms</span>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        resultCard.innerHTML = `
+                            <div class="result-header">
+                                <span class="method-name">❌ ${result.method}</span>
+                            </div>
+                            <div class="error-message">
+                                <strong>Error:</strong> ${result.error}
+                            </div>
+                        `;
+                    }
+                    
+                    resultsContainer.appendChild(resultCard);
+                });
+            }
+            
+            function clearResults() {
+                document.getElementById('contentText').value = '';
+                document.getElementById('results').innerHTML = '';
+            }
+        </script>
+    </body>
+    </html>'''
+    
+    with open('templates/index.html', 'w') as f:
+        f.write(html_template)
+    
+    print("✅ Created HTML template")
+
+def main():
+    """Main function to create and run the demo"""
+    
+    print("🌐 Creating Content Moderation Demo Frontend")
+    print("=" * 50)
+    
+    try:
+        # Create templates
+        create_templates()
+        
+        print("\n✅ Demo frontend created successfully!")
+        print("3. Open browser to: http://localhost:5001")
+        print("\n🚀 Starting demo server...")
+        
+        # Run the Flask app
+        app.run(debug=True, host='0.0.0.0', port=5001)
+        
+    except Exception as e:
+        print(f"❌ Demo creation failed: {e}")
+        return False
+    
+    return True
+
+if __name__ == "__main__":
+    main()
