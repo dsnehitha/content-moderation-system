@@ -1002,7 +1002,7 @@ def main():
             
             print(f"\n📋 Next steps:")
             print("1. View executions in Step Functions console")
-            print("2. Create frontend: python create_demo_frontend.py")
+            print("2. Create frontend: python app.py")
             print("3. Run full system test: python test_complete_system.py")
         else:
             print("❌ Step Functions setup failed")
