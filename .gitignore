@@ -203,3 +203,14 @@ model_path.txt
 #api information file
 api_info.json
 endpoint_info.json
+
+#execution info
+pipeline_info.json
+pipeline_execution_info.json
+pipeline_model_info.json
+
+#configuration file
+monitoring_config.json
+orchestration_config.json
+
+

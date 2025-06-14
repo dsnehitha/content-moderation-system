@@ -30,12 +30,23 @@ Create an inline policy for the user with the policies attached in `./trust-poli
 - Future: Image moderation datasets
 
 ## Files Overview
+
+### Core Infrastructure
 - `data_preparation.py`: Generate and prepare training data
 - `setup_infrastructure.py`: Create S3 buckets and IAM roles
-- `train_model.py`: SageMaker training script
-- `launch_training.py`: Launch training job
+- `launch_training.py`: Launch SageMaker training job
 - `deploy_endpoint.py`: Deploy model endpoint
-- `preprocessing_lambda.py`: Text preprocessing Lambda
-- `prediction_lambda.py`: Prediction orchestration Lambda
+
+### Processing Components
+- `prediction_lambda.py`: Text preprocessing and prediction Lambda (combined)
+- `bedrock_integration.py`: Amazon Bedrock content analysis
+- `cloudwatch_monitoring.py`: CloudWatch monitoring and metrics
+
+### Orchestration & APIs
+- `step_functions_orchestration.py`: Complete Step Functions workflow orchestration
 - `api_gateway_setup.py`: API Gateway configuration
+
+### Testing & Utilities
 - `test_system.py`: End-to-end testing
+- `test_complete_system.py`: Comprehensive system testing
+- `moderate_content.py`: Direct content moderation utility

@@ -1,9 +1,9 @@
 {
-  "timestamp": "2025-06-11T21:46:00.109532",
+  "timestamp": "2025-06-13T18:11:51.652453",
   "summary": {
     "total_tests": 13,
-    "passed_tests": 10,
-    "success_rate": 76.92307692307693
+    "passed_tests": 12,
+    "success_rate": 92.3076923076923
   },
   "results": {
     "day1_components": {
@@ -14,20 +14,20 @@
       },
       "basic_prediction": {
         "status": "passed",
-        "toxicity_score": 0.4294808274783131,
+        "toxicity_score": 0.4876518282137529,
         "test_text": "This is a test message."
       }
     },
     "sagemaker_pipeline": {
       "pipeline_status": {
         "status": "passed",
-        "pipeline_name": "content-moderation-pipeline-1749676022",
+        "pipeline_name": "content-moderation-pipeline-1749810977",
         "pipeline_status": "Active"
       },
       "recent_execution": {
         "status": "passed",
-        "execution_status": "Failed",
-        "start_time": "2025-06-11T16:07:06.066000-05:00"
+        "execution_status": "Succeeded",
+        "start_time": "2025-06-13T05:36:21.173000-05:00"
       }
     },
     "bedrock_integration": {
@@ -42,24 +42,24 @@
           {
             "text": "You are such an idiot!",
             "status": "passed",
-            "ml_score": 0.8577916444224066,
-            "final_score": 0.8578,
+            "ml_score": 0.8709143455402332,
+            "final_score": 0.8709,
             "action": "block",
             "bedrock_enhanced": false
           },
           {
             "text": "That movie was terrible.",
             "status": "passed",
-            "ml_score": 0.7201354547070069,
-            "final_score": 0.3181,
+            "ml_score": 0.7640125279983458,
+            "final_score": 0.3356,
             "action": "allow",
             "bedrock_enhanced": true
           },
           {
             "text": "Thank you for your help!",
             "status": "passed",
-            "ml_score": 0.14664765956691805,
-            "final_score": 0.1466,
+            "ml_score": 0.1561864618690925,
+            "final_score": 0.1562,
             "action": "allow",
             "bedrock_enhanced": false
           }
@@ -72,111 +72,139 @@
         "dashboard_name": "ContentModerationDashboard"
       },
       "custom_metrics": {
-        "status": "failed",
-        "error": "Parameter validation failed:\nUnknown parameter in input: \"MaxRecords\", must be one of: Namespace, MetricName, Dimensions, NextToken, RecentlyActive, IncludeLinkedAccounts, OwningAccount"
+        "status": "passed",
+        "metric_count": 19,
+        "sample_metrics": [
+          "BedrockAnalysisSuccess",
+          "ToxicityScore",
+          "PredictionLatency",
+          "PredictionRequestStart",
+          "ModerationDecision"
+        ]
       },
       "alarms": {
         "status": "passed",
-        "alarm_count": 4,
+        "alarm_count": 6,
         "alarm_names": [
           "ContentModeration-HighErrorRate",
+          "ContentModeration-HighFalsePositiveRate",
           "ContentModeration-HighLatency",
           "ContentModeration-LambdaErrors",
-          "ContentModeration-LowAccuracy"
+          "ContentModeration-LowAccuracy",
+          "ContentModeration-LowConfidence"
         ]
       }
     },
     "step_functions": {
-      "status": "skipped",
-      "reason": "Step Functions not deployed"
+      "state_machine": {
+        "status": "ACTIVE",
+        "name": "ContentModerationWorkflow-1749856226"
+      },
+      "workflow_executions": {
+        "status": "passed",
+        "executions": [
+          {
+            "test_case": "You are an idiot!",
+            "execution_status": "SUCCEEDED",
+            "execution_arn": "arn:aws:states:us-east-1:806070028440:execution:ContentModerationWorkflow-1749856226:comprehensive-test-1749856259-0",
+            "elapsed_time": 16
+          },
+          {
+            "test_case": "Thank you for your help!",
+            "execution_status": "SUCCEEDED",
+            "execution_arn": "arn:aws:states:us-east-1:806070028440:execution:ContentModerationWorkflow-1749856226:comprehensive-test-1749856276-1",
+            "elapsed_time": 16
+          }
+        ]
+      }
     },
     "end_to_end": {},
     "performance": {
       "sagemaker_performance": {
         "status": "passed",
-        "avg_latency_ms": 114.8984432220459,
-        "min_latency_ms": 59.751272201538086,
-        "max_latency_ms": 283.19406509399414,
+        "avg_latency_ms": 147.43342399597168,
+        "min_latency_ms": 80.36303520202637,
+        "max_latency_ms": 394.9120044708252,
         "success_rate": 1.0,
         "results": [
           {
             "text": "This is a simple test message.",
-            "toxicity_score": 0.4294808274783131,
-            "latency_ms": 283.19406509399414,
+            "toxicity_score": 0.4876518282137529,
+            "latency_ms": 394.9120044708252,
             "status": "success"
           },
           {
             "text": "You are such an idiot, I hate you!",
-            "toxicity_score": 0.9231490118827975,
-            "latency_ms": 59.751272201538086,
+            "toxicity_score": 0.9290252379785596,
+            "latency_ms": 87.49914169311523,
             "status": "success"
           },
           {
             "text": "That movie was absolutely terrible, what a waste of time.",
-            "toxicity_score": 0.697857969606002,
-            "latency_ms": 61.58804893493652,
+            "toxicity_score": 0.6998299990920915,
+            "latency_ms": 80.99889755249023,
             "status": "success"
           },
           {
             "text": "Thank you so much for your help, you're amazing!",
-            "toxicity_score": 0.07934627626036463,
-            "latency_ms": 105.32402992248535,
+            "toxicity_score": 0.07820379770021534,
+            "latency_ms": 93.39404106140137,
             "status": "success"
           },
           {
             "text": "I'm going to destroy you in this video game!",
-            "toxicity_score": 0.8942490047865179,
-            "latency_ms": 64.63479995727539,
+            "toxicity_score": 0.9124884017002672,
+            "latency_ms": 80.36303520202637,
             "status": "success"
           }
         ]
       },
       "bedrock_performance": {
         "status": "passed",
-        "avg_latency_ms": 2954.8370838165283,
-        "min_latency_ms": 60.8370304107666,
-        "max_latency_ms": 7558.373928070068,
+        "avg_latency_ms": 2960.462999343872,
+        "min_latency_ms": 86.92288398742676,
+        "max_latency_ms": 7271.713018417358,
         "success_rate": 1.0,
         "bedrock_usage_rate": 0.4,
         "results": [
           {
             "text": "This is a simple test message.",
-            "final_score": 0.2018,
+            "final_score": 0.2251,
             "action": "allow",
             "bedrock_enhanced": true,
-            "latency_ms": 7558.373928070068,
+            "latency_ms": 7241.283893585205,
             "status": "success"
           },
           {
             "text": "You are such an idiot, I hate you!",
-            "final_score": 0.9231,
+            "final_score": 0.929,
             "action": "block",
             "bedrock_enhanced": false,
-            "latency_ms": 61.786651611328125,
+            "latency_ms": 100.44217109680176,
             "status": "success"
           },
           {
             "text": "That movie was absolutely terrible, what a waste of time.",
-            "final_score": 0.3391,
+            "final_score": 0.3399,
             "action": "allow",
             "bedrock_enhanced": true,
-            "latency_ms": 7025.110960006714,
+            "latency_ms": 7271.713018417358,
             "status": "success"
           },
           {
             "text": "Thank you so much for your help, you're amazing!",
-            "final_score": 0.0793,
+            "final_score": 0.0782,
             "action": "allow",
             "bedrock_enhanced": false,
-            "latency_ms": 68.07684898376465,
+            "latency_ms": 101.95302963256836,
             "status": "success"
           },
           {
             "text": "I'm going to destroy you in this video game!",
-            "final_score": 0.8942,
+            "final_score": 0.9125,
             "action": "block",
             "bedrock_enhanced": false,
-            "latency_ms": 60.8370304107666,
+            "latency_ms": 86.92288398742676,
             "status": "success"
           }
         ]
